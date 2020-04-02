@@ -86,9 +86,14 @@ class Tagger:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--folder', type=str, default='/Users/lucweytingh/Documents/Projects/Spotify/Luc new/DDNB',
-                        help="Path where BPM's must be tagged")
+    parser.add_argument('--folder', type=str, default=None,
+                        help="Path of folder where bpms must be tagged")
     ARGS = parser.parse_args()
-    print(f"Adding BPM's to {ARGS.folder}")
-    t = Tagger(ARGS.folder)
-    t.tag_directory()
+
+    if ARGS.folder:
+        print(f"Adding BPM's to {ARGS.folder}")
+        t = Tagger(ARGS.folder)
+        t.tag_directory()
+    else:
+        print("usage: bmp_tagger.py --folder <path to folder>\n")
+        print("note: don't forget to export your SPOTIPY_CLIENT_ID and SPOTIPY_CLIENT_SECRET")
