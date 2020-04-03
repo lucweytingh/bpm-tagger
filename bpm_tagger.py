@@ -18,10 +18,11 @@ class Tagger:
         self.uris = {}
         self.bpms = {}
         self.start_digit = False
+        self.paths = []
 
     def get_fnames(self):
-        paths = list(Path(self.directory).rglob("*.mp3"))
-        self.fnames = [str(path).split("/")[-1] for path in paths]
+        self.paths = list(Path(self.directory).rglob("*.mp3"))
+        self.fnames = [str(path).split("/")[-1] for path in self.paths]
         if False in [path[0].isdigit() for path in self.fnames]:
             self.start_digit = False
         else:
@@ -38,26 +39,34 @@ class Tagger:
             self.tracks_artists.append([track, artist])
 
     def get_uris(self):
-        for (track, artist), fname in zip(self.tracks_artists, self.fnames):
-            res = self.spotify.search(q=f"artist:{artist} track:{track}", type='track', limit=1)
-            items = res['tracks']['items']
+        for (track, artist), path in zip(self.tracks_artists, self.paths):
+            res = self.spotify.search(
+                q=f"artist:{artist} track:{track}", type="track", limit=1
+            )
+            items = res["tracks"]["items"]
             if len(items) > 0:
-                self.uris[fname] = res["tracks"]["items"][0]["uri"]
+                self.uris[path] = res["tracks"]["items"][0]["uri"]
             else:
-                new_track_name, worked = re.subn(r' *\(Original Mix\) *', r'', track)
+                new_track_name, worked = re.subn(
+                    r" *\(Original Mix\) *", r"", track
+                )
                 if worked:
-                    res = self.spotify.search(q=f"artist:{artist} track:{new_track_name}", type='track', limit=1)
-                    items = res['tracks']['items']
+                    res = self.spotify.search(
+                        q=f"artist:{artist} track:{new_track_name}",
+                        type="track",
+                        limit=1,
+                    )
+                    items = res["tracks"]["items"]
                     if len(items) > 0:
-                        self.uris[fname] = res["tracks"]["items"][0]["uri"]
+                        self.uris[path] = res["tracks"]["items"][0]["uri"]
                     else:
                         print(f"Unable to find {track} - {artist} on Spotify")
                 else:
                     print(f"Unable to find {track} - {artist} on Spotify")
 
     def get_bpms(self):
-        for fname, uri in self.uris.items():
-            self.bpms[fname] = self.spotify.audio_features([uri])[0]["tempo"]
+        for path, uri in self.uris.items():
+            self.bpms[path] = self.spotify.audio_features([uri])[0]["tempo"]
 
     def _parse_filename(self, fname):
         lpart, rpart = fname.split("-")
@@ -66,11 +75,11 @@ class Tagger:
         return artist, title
 
     def write_bpms(self):
-        for fname, bpm in self.bpms.items():
-            f = eyed3.load(self.directory + "/" + fname)
-            f.tag.bpm = bpm
+        for path, bpm in self.bpms.items():
+            f = eyed3.load(path)
+            f.tag.bpm = int(self.bpms[path])
             f.tag.save()
-            print(f"Wrote {bpm} as BPM to {fname}")
+            print(f"Wrote {f.tag.bpm} as BPM to {path}")
 
     def tag_directory(self):
         self.get_fnames()
@@ -83,11 +92,14 @@ class Tagger:
         print("Done!")
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--folder', type=str, default=None,
-                        help="Path of folder where bpms must be tagged")
+    parser.add_argument(
+        "--folder",
+        type=str,
+        default=None,
+        help="Path of folder where bpms must be tagged",
+    )
     ARGS = parser.parse_args()
 
     if ARGS.folder:
@@ -96,4 +108,6 @@ if __name__ == "__main__":
         t.tag_directory()
     else:
         print("usage: bmp_tagger.py --folder <path to folder>\n")
-        print("note: don't forget to export your SPOTIPY_CLIENT_ID and SPOTIPY_CLIENT_SECRET")
+        print(
+            "note: don't forget to export your SPOTIPY_CLIENT_ID and SPOTIPY_CLIENT_SECRET"
+        )
