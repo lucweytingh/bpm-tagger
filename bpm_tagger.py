@@ -8,11 +8,14 @@ import re
 
 
 class Tagger:
-    def __init__(self, directory):
+    def __init__(self, directory, overwrite_existing=False, print_res=False):
+        self._directory = directory
+        self._overwrite_existing = overwrite_existing
+        self._print_res = print_res
+
         self.spotify = spotipy.Spotify(
             client_credentials_manager=SpotifyClientCredentials()
         )
-        self.directory = directory
         self.fnames = []
         self.tracks_artists = []
         self.uris = {}
@@ -20,8 +23,22 @@ class Tagger:
         self.start_digit = False
         self.paths = []
 
+    def get_info_from_id3(self):
+        self.paths = [str(x) for x in Path(self._directory).rglob("*.mp3")]
+        for path in self.paths:
+            f = eyed3.load(path)
+            if f.tag:
+                # add file to list if there is no bpm or overwriting is True
+                if not f.tag.bpm or self._overwrite_existing:
+                    self.tracks_artists.append([f.tag.title, f.tag.artist])
+            else:
+                print(f"Unable to load {path.split('/')[-1]}")
+
     def get_fnames(self):
-        self.paths = list(Path(self.directory).rglob("*.mp3"))
+        """
+        Unused -> replaced by get_info_from_id3
+        """
+        self.paths = list(Path(self._directory).rglob("*.mp3"))
         self.fnames = [str(path).split("/")[-1] for path in self.paths]
         if False in [path[0].isdigit() for path in self.fnames]:
             self.start_digit = False
@@ -29,6 +46,9 @@ class Tagger:
             self.start_digit = True
 
     def get_tracks_artists(self):
+        """
+        Unused -> replaced by get_info_from_id3
+        """
         for fname in self.fnames:
             if self.start_digit:
                 _, lpart, rpart = fname.split("-", 2)
@@ -77,18 +97,23 @@ class Tagger:
     def write_bpms(self):
         for path, bpm in self.bpms.items():
             f = eyed3.load(path)
-            f.tag.bpm = int(self.bpms[path])
+            f.tag.bpm = bpm
             f.tag.save()
-            print(f"Wrote {f.tag.bpm} as BPM to {path}")
+            if self._print_res:
+                print(f"Wrote {f.tag.bpm} as BPM to {path.split('/')[-1]}")
 
     def tag_directory(self):
-        self.get_fnames()
-        print("Found:", len(self.fnames), "files")
-        self.get_tracks_artists()
-        self.get_uris()
-        print("Found:", len(self.uris), "corresponding songs in spotify")
-        self.get_bpms()
-        self.write_bpms()
+        self.get_info_from_id3()
+        print("Found", len(self.paths), "files")
+        if not self._overwrite_existing:
+            print(f"{len(self.paths) - len(self.tracks_artists)}/{len(self.paths)} already have a BPM")
+
+        if len(self.tracks_artists):
+            self.get_uris()
+            print(f"Found {len(self.uris)}/{len(self.tracks_artists)} corresponding songs in spotify")
+            self.get_bpms()
+            self.write_bpms()
+            print(f"Wrote BPMs to {len(self.uris)}/{len(self.tracks_artists)} files")
         print("Done!")
 
 
@@ -98,13 +123,26 @@ if __name__ == "__main__":
         "--folder",
         type=str,
         default=None,
-        help="Path of folder where bpms must be tagged",
+        help="Path of folder where bpms must be tagged"
     )
+    parser.add_argument(
+        "--overwrite",
+        type=bool,
+        default=False,
+        help="If existing BPM's should be overwritten"
+    )
+    parser.add_argument(
+        "--printres",
+        type=bool,
+        default=False,
+        help="Print the BPM's found"
+    )
+
     ARGS = parser.parse_args()
 
     if ARGS.folder:
         print(f"Adding BPM's to {ARGS.folder}")
-        t = Tagger(ARGS.folder)
+        t = Tagger(ARGS.folder, ARGS.overwrite, ARGS.printres)
         t.tag_directory()
     else:
         print("usage: bmp_tagger.py --folder <path to folder>\n")
